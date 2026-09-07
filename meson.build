@@ -15,7 +15,6 @@ css_gresource = gnome.compile_resources(
     source_dir: 'data'
 )
 
-subdir('protocol')
 
 executable(
     meson.project_name(),
@@ -41,7 +40,7 @@ executable(
         dependency ('gtk4-x11'),
         dependency ('libadwaita-1'),
         dependency('wayland-client'),
-        pantheon_desktop_shell_dep
+        dependency('gtk4-layer-shell-0')
     ],
     install : true
 )

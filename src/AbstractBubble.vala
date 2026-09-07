@@ -46,8 +46,6 @@ public class Notifications.AbstractBubble : Gtk.Window {
     private uint timeout_id;
 
     private double current_swipe_progress = 1.0;
-    private Pantheon.Desktop.Shell? desktop_shell;
-    private Pantheon.Desktop.Panel? desktop_panel;
 
     static construct {
         var transparency_schema = SettingsSchemaSource.get_default ().lookup ("io.elementary.desktop.wingpanel", true);
@@ -115,14 +113,18 @@ public class Notifications.AbstractBubble : Gtk.Window {
         accessible_role = ALERT;
 
         child.realize.connect (() => {
-            if (Gdk.Display.get_default () is Gdk.Wayland.Display) {
-                //  We have to wrap in Idle otherwise the Meta.Window of the WaylandSurface in Gala is still null
-                Idle.add_once (init_wl);
-            } else {
+            if (Gdk.Display.get_default () is Gdk.X11.Display) {
                 x11_make_notification ();
                 x11_update_mutter_hints ();
             }
         });
+
+        if (Gdk.Display.get_default () is Gdk.Wayland.Display) {
+            GtkLayerShell.init_for_window (this);
+            GtkLayerShell.set_layer (this, GtkLayerShell.Layer.TOP);
+            GtkLayerShell.set_anchor(this, GtkLayerShell.Edge.TOP, true);
+            GtkLayerShell.set_anchor(this, GtkLayerShell.Edge.RIGHT, true);
+        }
 
         carousel.notify["position"].connect (update_swipe_progress);
 
@@ -149,12 +151,7 @@ public class Notifications.AbstractBubble : Gtk.Window {
 
         current_swipe_progress = carousel.position;
 
-        if (desktop_panel != null) {
-            int left, right;
-            get_blur_margins (out left, out right);
-
-            desktop_panel.add_blur (left, right, 16, 16, 9);
-        } else if (Gdk.Display.get_default () is Gdk.X11.Display) {
+        if (Gdk.Display.get_default () is Gdk.X11.Display) {
             x11_update_mutter_hints ();
         }
     }
@@ -166,7 +163,7 @@ public class Notifications.AbstractBubble : Gtk.Window {
         }
 
         if (Gdk.Display.get_default () is Gdk.X11.Display) {
-            // Avoid present on X11 because it focuses the window 
+            // Avoid present on X11 because it focuses the window
             base.show ();
         } else {
             base.present ();
@@ -242,33 +239,4 @@ public class Notifications.AbstractBubble : Gtk.Window {
         }
     }
 
-    private static Wl.RegistryListener registry_listener;
-    private void init_wl () {
-        registry_listener.global = registry_handle_global;
-        unowned var display = Gdk.Display.get_default ();
-        if (display is Gdk.Wayland.Display) {
-            unowned var wl_display = ((Gdk.Wayland.Display) display).get_wl_display ();
-            var wl_registry = wl_display.get_registry ();
-            wl_registry.add_listener (
-                registry_listener,
-                this
-            );
-
-            if (wl_display.roundtrip () < 0) {
-                return;
-            }
-        }
-    }
-
-    public void registry_handle_global (Wl.Registry wl_registry, uint32 name, string @interface, uint32 version) {
-        if (@interface == "io_elementary_pantheon_shell_v1") {
-            desktop_shell = wl_registry.bind<Pantheon.Desktop.Shell> (name, ref Pantheon.Desktop.Shell.iface, uint32.min (version, 1));
-            unowned var surface = get_surface ();
-            if (surface is Gdk.Wayland.Surface) {
-                unowned var wl_surface = ((Gdk.Wayland.Surface) surface).get_wl_surface ();
-                desktop_panel = desktop_shell.get_panel (wl_surface);
-                desktop_panel.add_blur (16, 16, 16, 16, 9);
-            }
-        }
-    }
 }
