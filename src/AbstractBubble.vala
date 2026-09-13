@@ -70,7 +70,7 @@ public class Notifications.AbstractBubble : Gtk.Window {
             halign = Gtk.Align.START,
             valign = Gtk.Align.START
         };
-        close_button.add_css_class ("close");
+        close_button.add_css_class (Granite.STYLE_CLASS_OSD);
 
         close_revealer = new Gtk.Revealer () {
             reveal_child = false,
@@ -112,12 +112,6 @@ public class Notifications.AbstractBubble : Gtk.Window {
 
         accessible_role = ALERT;
 
-        child.realize.connect (() => {
-            if (Gdk.Display.get_default () is Gdk.X11.Display) {
-                x11_make_notification ();
-                x11_update_mutter_hints ();
-            }
-        });
 
         if (Gdk.Display.get_default () is Gdk.Wayland.Display) {
             GtkLayerShell.init_for_window (this);
@@ -151,9 +145,6 @@ public class Notifications.AbstractBubble : Gtk.Window {
 
         current_swipe_progress = carousel.position;
 
-        if (Gdk.Display.get_default () is Gdk.X11.Display) {
-            x11_update_mutter_hints ();
-        }
     }
 
     public new void present () {
@@ -162,12 +153,7 @@ public class Notifications.AbstractBubble : Gtk.Window {
             timeout_id = 0;
         }
 
-        if (Gdk.Display.get_default () is Gdk.X11.Display) {
-            // Avoid present on X11 because it focuses the window
-            base.show ();
-        } else {
-            base.present ();
-        }
+        base.present ();
 
         if (timeout != 0) {
             timeout_id = Timeout.add (timeout, timeout_expired);
@@ -194,49 +180,6 @@ public class Notifications.AbstractBubble : Gtk.Window {
     private bool timeout_expired () {
         closed (CloseReason.EXPIRED);
         return Source.REMOVE;
-    }
-
-    private void get_blur_margins (out int left, out int right) {
-        var width = get_width ();
-        var distance = (1 - current_swipe_progress) * width;
-        left = (int) (16 + distance).clamp (0, width);
-        right = (int) (16 - distance).clamp (0, width);
-    }
-
-    private void x11_update_mutter_hints () {
-        var display = Gdk.Display.get_default ();
-        if (display is Gdk.X11.Display) {
-            unowned var xdisplay = ((Gdk.X11.Display) display).get_xdisplay ();
-
-            var window = ((Gdk.X11.Surface) get_surface ()).get_xid ();
-            var prop = xdisplay.intern_atom ("_MUTTER_HINTS", false);
-
-            int left, right;
-            get_blur_margins (out left, out right);
-
-            var value = "blur=%d,%d,16,16,9".printf (left, right);
-
-            xdisplay.change_property (window, prop, X.XA_STRING, 8, 0, (uchar[]) value, value.length);
-        }
-    }
-
-    private void x11_make_notification () {
-        unowned var display = Gdk.Display.get_default ();
-        if (display is Gdk.X11.Display) {
-            unowned var x11_surface = (Gdk.X11.Surface) get_surface ();
-            var window = (x11_surface).get_xid ();
-            x11_surface.set_skip_pager_hint (true);
-            x11_surface.set_skip_taskbar_hint (true);
-
-            unowned var xdisplay = ((Gdk.X11.Display) display).get_xdisplay ();
-            var atom = xdisplay.intern_atom ("_NET_WM_WINDOW_TYPE", false);
-            var notification_atom = xdisplay.intern_atom ("_NET_WM_WINDOW_TYPE_NOTIFICATION", false);
-
-            // (X.Atom) 4 is XA_ATOM
-            // 32 is format
-            // 0 means replace
-            xdisplay.change_property (window, atom, (X.Atom) 4, 32, 0, (uchar[]) notification_atom, 1);
-        }
     }
 
 }
